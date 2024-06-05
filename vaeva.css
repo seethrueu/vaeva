@@ -1,0 +1,22 @@
+@page { 
+    size: A4; margin: 1.5cm; 
+}
+
+body {
+    font-family: sans-serif;
+    font-size: 10pt;
+}
+
+.border {
+    border: 0.1em solid black;
+}
+
+.relaxed {
+    padding: 0.5em;
+    margin: 0em;
+}
+
+thead, tfoot {
+    background-color: #dddddd;
+    font-weight: bold;
+}
