@@ -4,7 +4,7 @@
 
 body {
     font-family: sans-serif;
-    font-size: 10pt;
+    font-size: 9pt;
 }
 
 .border {
@@ -16,7 +16,19 @@ body {
     margin: 0em;
 }
 
+.right {
+    text-align: right;
+}
+
+.center, .centre {
+    text-align: center;
+}
+
 thead, tfoot {
-    background-color: #dddddd;
+    background-color: lightskyblue;
     font-weight: bold;
+}
+
+tbody tr:nth-child(even) {
+    background-color: #eeeeee;
 }
