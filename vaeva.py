@@ -12,6 +12,7 @@ from weasyprint import HTML, CSS
 users = {}
 sites = {}
 outputs = {}
+meta = {}
 sessions = []
 email_to_user = {}
 badge_to_user = {}
@@ -20,7 +21,7 @@ args = None
 User = namedtuple('User', ['id', 'name', 'email', 'badge', 'street', 'postcode', 'city'])
 Site = namedtuple('Site', ['id', 'name', 'type', 'login', 'password'])
 Output = namedtuple('Output', ['id', 'name', 'data', 'template', 'filename', 'renderer'])
-Session = namedtuple('Session', ['site', 'charger', 'user', 'email', 'badge', 'date', 'duration', 'quantity', 'amount'])
+Session = namedtuple('Session', ['site', 'charger', 'user', 'email', 'badge', 'date', 'duration', 'quantity_total', 'quantity_grid', 'quantity_green', 'amount'])
 
 
 def bom():
@@ -38,7 +39,7 @@ def bolm():
 
 
 def load_config():
-    global users, email_to_user, badge_to_user, sites, outputs, args
+    global users, meta, email_to_user, badge_to_user, sites, outputs, args
 
     parser = argparse.ArgumentParser(
                     prog='vaeva',
@@ -88,12 +89,15 @@ def load_config():
         for id, o in config['output'].items():
             outputs[id] = Output(id=id, name=o.get('name'), filename=o.get('filename'), template=o.get('template'), data=o.get('data'), renderer=o.get('renderer','file'))
 
+        # load meta
+        meta = config.get('meta', {})
 
-def add_session(site, charger, email='', badge='', date=None, duration=0, quantity=0, amount=0.0):
+
+def add_session(site, charger, email='', badge='', date=None, duration=0, quantity_total=0, quantity_grid=0, quantity_green=0, amount=0.0):
     global sessions, email_to_user, badge_to_user
     user = email_to_user.get(email, badge_to_user.get(badge))
     if user is not None:
-        sessions.append(Session(site, charger, user, email, badge, date, duration, round(quantity,3), round(amount,2)))
+        sessions.append(Session(site, charger, user, email, badge, date, duration, round(quantity_total,3), round(quantity_grid,3), round(quantity_green,3), round(amount,2)))
 
 
 def process_wallbox(site):
@@ -105,7 +109,15 @@ def process_wallbox(site):
         sessions = w.getSessionList(charger, args.begin_date, args.end_date)
         for session in sessions['data']:
             session_data = session['attributes']
-            add_session(site.id, charger, session_data['user_email'], session_data['user_rfid'], datetime.datetime.fromtimestamp(session_data['start']), session_data['time'], session_data['energy'], session_data['cost'])
+            add_session(site.id, charger, 
+                        session_data['user_email'], 
+                        session_data['user_rfid'], 
+                        datetime.datetime.fromtimestamp(session_data['start']), 
+                        session_data['time'], 
+                        session_data['energy'], 
+                        session_data['energy']-session_data['green_energy'], 
+                        session_data['green_energy'], 
+                        session_data['cost'])
 
 
 def process_easee(site):
@@ -123,18 +135,25 @@ def process_site(site):
 
 
 def calculate_totals(data):
-    total_quantity = 0.0
-    total_amount = 0.0
+    sum_quantity_total = 0.0
+    sum_quantity_grid = 0.0
+    sum_quantity_green = 0.0
+    sum_amount = 0.0
     for session in data['sessions']:
-        total_quantity += session.quantity
-        total_amount += session.amount
-    data['total'] = {'quantity' : round(total_quantity,3), 'amount' : round(total_amount,2)}
+        sum_quantity_total += session.quantity_total
+        sum_quantity_grid += session.quantity_grid
+        sum_quantity_green += session.quantity_green
+        sum_amount += session.amount
+    data['sum'] = {'quantity_total' : round(sum_quantity_total,3), 'quantity_grid' : round(sum_quantity_grid,3), 'quantity_green' : round(sum_quantity_green,3), 'amount' : round(sum_amount,2)}
 
 
 def generate_output(output):
     variables = {}
     data = {}
-    data['meta'] = {'begin_date' : args.begin_date, 'end_date' : args.end_date, 'today' : datetime.datetime.today()}
+    meta['begin_date'] = args.begin_date
+    meta['end_date'] = args.end_date
+    meta['today'] = datetime.datetime.today()
+    data['meta'] = meta
 
     # generate one history report
     if output.data =='history':
