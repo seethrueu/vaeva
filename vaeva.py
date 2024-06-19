@@ -21,7 +21,7 @@ args = None
 User = namedtuple('User', ['id', 'name', 'email', 'badge', 'street', 'postcode', 'city'])
 Site = namedtuple('Site', ['id', 'name', 'type', 'login', 'password'])
 Output = namedtuple('Output', ['id', 'name', 'data', 'template', 'filename', 'renderer'])
-Session = namedtuple('Session', ['site', 'charger', 'user', 'email', 'badge', 'date', 'duration', 'quantity_total', 'quantity_grid', 'quantity_green', 'amount'])
+Session = namedtuple('Session', ['site', 'charger', 'user', 'email', 'badge', 'date', 'duration', 'quantity_total', 'quantity_grid', 'quantity_green', 'amount', 'speed'])
 
 
 def bom():
@@ -97,7 +97,7 @@ def add_session(site, charger, email='', badge='', date=None, duration=0, quanti
     global sessions, email_to_user, badge_to_user
     user = email_to_user.get(email, badge_to_user.get(badge))
     if user is not None:
-        sessions.append(Session(site, charger, user, email, badge, date, duration, round(quantity_total,3), round(quantity_grid,3), round(quantity_green,3), round(amount,2)))
+        sessions.append(Session(site, charger, user, email, badge, date, duration, round(quantity_total,3), round(quantity_grid,3), round(quantity_green,3), round(amount,2), round(quantity_total/duration*3600.0, 2)))
 
 
 def process_wallbox(site):
@@ -125,7 +125,7 @@ def process_easee(site):
 
 
 def process_site(site):
-    print('Loading data from site', site.name, '({})'.format(site.id))
+    print('Fetching data from site', site.name, '({})'.format(site.id))
     if site.type == 'wallbox':
         process_wallbox(site)
     elif site.type == 'easee':
@@ -199,7 +199,10 @@ def sort_session(s):
 def main():
     load_config()
 
-    print('Using range from', args.begin_date, 'to', args.end_date)
+    print('Date range from', 
+            '{0:02d}/{1:02d}/{2:04d}'.format(args.begin_date.day, args.begin_date.month, args.begin_date.year), 
+            'to', 
+            '{0:02d}/{1:02d}/{2:04d}'.format(args.end_date.day, args.end_date.month, args.end_date.year))
 
     # if no site is specified, process all sites, otherwise only the requested site
     if args.site is None:
