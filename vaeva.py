@@ -7,6 +7,8 @@ from collections import namedtuple
 from pprint import pprint
 import argparse
 import dateparser
+import asyncio
+from pyeasee import Easee
 from weasyprint import HTML, CSS
 
 users = {}
@@ -19,7 +21,7 @@ badge_to_user = {}
 args = None
 
 User = namedtuple('User', ['id', 'name', 'email', 'badge', 'street', 'postcode', 'city'])
-Site = namedtuple('Site', ['id', 'name', 'type', 'login', 'password'])
+Site = namedtuple('Site', ['id', 'name', 'type', 'login', 'password', 'price'])
 Output = namedtuple('Output', ['id', 'name', 'data', 'template', 'filename', 'renderer'])
 Session = namedtuple('Session', ['site', 'charger', 'user', 'email', 'badge', 'date', 'duration', 'quantity_total', 'quantity_grid', 'quantity_green', 'amount', 'speed'])
 
@@ -83,7 +85,7 @@ def load_config():
 
         # load sites
         for id, s in config['sites'].items():
-            sites[id] = Site(id=id, name=s.get('name'), type=s.get('type'), login=s.get('login'), password=s.get('password'))
+            sites[id] = Site(id=id, name=s.get('name'), type=s.get('type'), login=s.get('login'), password=s.get('password'), price=s.get('price', 0))
 
         # load outputs
         for id, o in config['output'].items():
@@ -109,6 +111,9 @@ def process_wallbox(site):
         sessions = w.getSessionList(charger, args.begin_date, args.end_date)
         for session in sessions['data']:
             session_data = session['attributes']
+            amount = session_data['cost']
+            if site.price != 0.0:
+                amount = session_data['energy'] * site.price
             add_session(site.id, charger, 
                         session_data['user_email'], 
                         session_data['user_rfid'], 
@@ -117,11 +122,30 @@ def process_wallbox(site):
                         session_data['energy'], 
                         session_data['energy']-session_data['green_energy'], 
                         session_data['green_energy'], 
-                        session_data['cost'])
+                        amount)
 
 
-def process_easee(site):
-    pass
+async def process_easee(site):
+    e = Easee(site.login, site.password)
+    sites = await e.get_sites()
+    for s in sites:
+        circuits = s.get_circuits()
+        for circuit in circuits:
+            chargers = circuit.get_chargers()
+            for charger in chargers:
+                sessions = await charger.get_sessions_between_dates(args.begin_date, args.end_date)
+                '''sessions = await (
+                        await e.get(f"/api/sessions/charger/{charger.id}/sessions/{args.begin_date.isoformat()}/{args.end_date.isoformat()}")
+                    ).json()
+                pprint(sessions)
+                '''
+                for session in sessions:
+                    for k, v in session.items():
+                        duration = (session['carDisconnected']-session['carConnected']).seconds
+                        quantity = session['kiloWattHours']
+                        amount = quantity * site.price
+                    add_session(site.id, charger.id, site.login, '', session['carConnected'], duration, quantity, quantity, 0, amount)
+    await e.close()
 
 
 def process_site(site):
@@ -129,7 +153,7 @@ def process_site(site):
     if site.type == 'wallbox':
         process_wallbox(site)
     elif site.type == 'easee':
-        process_easee(site)
+        asyncio.run(process_easee(site))
     else:
         raise ValueError('Unknown site type {}'.format(site.type))
 
